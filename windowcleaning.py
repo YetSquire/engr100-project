@@ -47,25 +47,56 @@ print(" ");
 print(initZ);
 print(" ");
 
-def moveLeft(distance):
-    good = False
-    currentY, currentX = E100_functions.get_XY(client); #swapped because 
-    currentZ = E100_functions.get_barometer(client);
-    while not good :
-        currentY, currentX = E100_functions.get_XY(client); #swapped because 
-        currentZ = E100_functions.get_barometer(client);
-        if (currentY < initY - 1) :
-            E100_functions.set_quadcopter(client,10,0,0,0.8)
-        else: 
-            E100_functions.set_quadcopter(client,-10,0,0,0.8)
-            
-        if PARAMETERS:
-            good = true
+K_P = 1.2
+K_I = 0.5
+K_D = 0.5
+#############
 
+alpha = .35
+lastLPF = 0
+currentLPF = 0
+integration_term = 0
+throttle = 0.625  # initialize Throttle
+wind_flag = 1
+error_old = 0
+
+alt_log = []
+
+#throttle keeps z constant
+#pitch is from building (existing wind concept)
+#roll is 
 
 alpha_alt = 0.7
 alpha_lidar = 1.0
 start = time.time()
+
+def stabilize(error_old, integration_term, was_moving_right):
+    currentY, currentX = E100_functions.get_XY(client); #swapped because 
+      #possibly change to a variable later
+    error= abs(20-currentY)
+    
+    differential_term = (error - error_old)/dt    
+    if K_P*error + K_I*integration_term + K_D*differential_term <0:
+        roll = 0
+    else:
+        roll = K_P*error + K_I*integration_term + K_D*differential_term
+        if was_moving_right:
+            roll*=-2
+        else: roll*=2
+    if roll >= 1:
+            if was_moving_right:
+                roll*=-2
+            else:
+                roll*=2
+    else: 
+        E100_functions.set_quadcopter(client, roll,0,0,throttle)
+    return error
+
+def moveLeft():        
+        E100_functions.set_quadcopter(client,-10,0,0,throttle)
+    
+def moveRight():
+        E100_functions.set_quadcopter(client,10,0,0,throttle)
 
 
 while True:
@@ -73,7 +104,32 @@ while True:
     if now - start < 5: 
         E100_functions.set_quadcopter(client,0,0,0,0.7)
     else:
-        moveLeft(20)
+        currentY, currentX = E100_functions.get_XY(client); #swapped because 
+        currentZ = E100_functions.get_barometer(client);
+        yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
+        alt_log.append(currentY)
+        plt.plot(alt_log)
+        targetDist = 20
+        startStab = 10
+        if abs(currentY - initY) < startStab:
+            moveRight()
+        elif abs(currentY - initY) < targetDist:
+            if yVel > 0: t = True
+            holder = stabilize(error_old, integration_term, t)
+            error_old = holder
+            integration_term += holder*dt
+        elif yVel != 0:
+            t = False
+            if yVel > 0: 
+                t = True
+                t = False
+            holder = stabilize(error_old, integration_term, t)
+            error_old = holder
+            integration_term += holder*dt
+        else: 
+            E100_functions.set_quadcopter(client,0,0,0,0.6)
+            
+
 
 
 """target_alt = 100
