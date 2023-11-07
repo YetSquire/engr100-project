@@ -5,6 +5,7 @@ ENG100-400
 
 import sys, platform
 from pathlib import Path
+
 if platform.system() == 'Darwin':
     airsim_install = '$HOME/AirSim'
 else:
@@ -14,7 +15,7 @@ sys.path.append(str(Path(airsim_install) / 'PythonClient' / 'multirotor'))
 
 ############### import a few useful libraries ###########
 
-#import setup_path
+# import setup_path
 import time
 import numpy as np
 import math
@@ -22,10 +23,10 @@ import matplotlib.pyplot as plt
 
 ############### establish the link to AirSim ###########
 
-import airsim              # import AirSim API
-import E100_functions      # import drone simulator library
+import airsim  # import AirSim API
+import E100_functions  # import drone simulator library
 
-dt = E100_functions.dt()  
+dt = E100_functions.dt()
 client = airsim.MultirotorClient()
 client.confirmConnection()
 client.enableApiControl(True)
@@ -33,19 +34,19 @@ client.armDisarm(True)
 
 #### Copy and paste the above in your own flight controller #####
 
-initX, initY = E100_functions.get_XY(client);
-initZ = E100_functions.get_barometer(client);
+initX, initY = E100_functions.get_XY(client)
+initZ = E100_functions.get_barometer(client)
 
 currentX = initX
 currentY = initY
 currentZ = initZ
 
-print(initX);
-print(" ");
-print(initY);
-print(" ");
-print(initZ);
-print(" ");
+print(initX)
+print(" ")
+print(initY)
+print(" ")
+print(initZ)
+print(" ")
 
 K_P = 2
 K_I = 0.4
@@ -55,69 +56,79 @@ K_D = 1.5
 alpha = .35
 lastLPF = 0
 currentLPF = 0
-integration_term = 0
 throttle = 0.625  # initialize Throttle
 wind_flag = 1
 
+errorX = 0
+errorY = 0
+errorZ = 0
+
+integrationX = 0
+integrationY = 0
+integrationZ = 0
+
+targetX = 0
+targetY = 0
+targetZ = 0
+
 alt_log = []
 
-#throttle keeps z constant
-#pitch is from building (existing wind concept)
-#roll is 
+# throttle keeps z constant
+# pitch is from building (existing wind concept)
+# roll is
 
 alpha_alt = 0.7
 alpha_lidar = 1.0
 start = time.time()
 
+
 def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ):
     errorX = 0
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
     throttle, errorZ = stabilizeZ(errorOldZ, integrationZ, targetZ)
-    #future stabilizeX
-    
-    E100_functions.set_quadcopter(client, roll,0,0,throttle)
+    # future stabilizeX
+
+    E100_functions.set_quadcopter(client, roll, 0, 0, throttle)
     return errorX, errorY, errorZ
-    
 
-def stabilizeY (error_old, integration_term, target_dist):
-    currentY, currentX = E100_functions.get_XY(client); #swapped because 
-      #possibly change to a variable later
-    error= target_dist - currentY
-    
-    differential_term = (error - error_old)/dt    
 
-    roll = K_P*error + K_I*integration_term + K_D*differential_term
+def stabilizeY(error_old, integration_term, target_dist):
+    currentY, currentX = E100_functions.get_XY(client);  # swapped because
+    # possibly change to a variable later
+    error = target_dist - currentY
 
-    roll*=2
+    differential_term = (error - error_old) / dt
+
+    roll = K_P * error + K_I * integration_term + K_D * differential_term
+
+    roll *= 2
     return roll, error
 
-def stabilizeZ (error_old, integration_term, target_dist):
-    currentZ = E100_functions.get_barometer(client);
-    error= target_dist - currentZ
-    
-    differential_term = (error - error_old)/dt    
 
-    throttle = K_P*error + K_I*integration_term + K_D*differential_term
+def stabilizeZ(error_old, integration_term, target_dist):
+    currentZ = E100_functions.get_barometer(client);
+    error = target_dist - currentZ
+
+    differential_term = (error - error_old) / dt
+
+    throttle = K_P * error + K_I * integration_term + K_D * differential_term
 
     return throttle, error
-    
-    
+
 
 while True:
     now = time.time()
-    if now - start < 5: 
-        E100_functions.set_quadcopter(client,0,0,0,0.7)
+    if now - start < 5:
+        E100_functions.set_quadcopter(client, 0, 0, 0, 0.7)
     else:
-        currentY, currentX = E100_functions.get_XY(client); #swapped because 
-        currentZ = E100_functions.get_barometer(client);
+        currentY, currentX = E100_functions.get_XY(client)  # swapped because
+        currentZ = E100_functions.get_barometer(client)
         yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
-        targetDist = -10
-        errorX, errorY, errorZ = stabilizeAll(error_old, integration_term, targetDist)
-        #calculate integrals
-        
-            
 
-
+        errorX, errorY, errorZ = stabilizeAll(errorX, integrationX, targetX,
+                                              errorY, integrationY, targetY,
+                                              errorZ, integrationZ, targetZ)
+        # calculate integrals
 
 """target_alt = 100
 K_P = 1
@@ -252,25 +263,3 @@ plt.scatter(x_pos,y_pos)"""
 ############### release the link to AirSim ###########
 client.armDisarm(False)
 client.enableApiControl(False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
