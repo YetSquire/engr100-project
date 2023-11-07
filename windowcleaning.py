@@ -47,9 +47,9 @@ print(" ");
 print(initZ);
 print(" ");
 
-K_P = 1.2
-K_I = 0.5
-K_D = 0.5
+K_P = 2
+K_I = 0.4
+K_D = 1.5
 #############
 
 alpha = .35
@@ -70,34 +70,22 @@ alpha_alt = 0.7
 alpha_lidar = 1.0
 start = time.time()
 
-def stabilize(error_old, integration_term, was_moving_right):
+def stabilizeAll(error_old, integration_term, target_dist):
     currentY, currentX = E100_functions.get_XY(client); #swapped because 
       #possibly change to a variable later
-    error= abs(20-currentY)
+    error= target_dist - currentY
     
     differential_term = (error - error_old)/dt    
-    if K_P*error + K_I*integration_term + K_D*differential_term <0:
-        roll = 0
-    else:
-        roll = K_P*error + K_I*integration_term + K_D*differential_term
-        if was_moving_right:
-            roll*=-2
-        else: roll*=2
-    if roll >= 1:
-            if was_moving_right:
-                roll*=-2
-            else:
-                roll*=2
-    else: 
-        E100_functions.set_quadcopter(client, roll,0,0,throttle)
+
+    roll = K_P*error + K_I*integration_term + K_D*differential_term
+
+    roll*=2
+    E100_functions.set_quadcopter(client, roll,0,0,throttle)
     return error
 
-def moveLeft():        
-        E100_functions.set_quadcopter(client,-10,0,0,throttle)
-    
-def moveRight():
-        E100_functions.set_quadcopter(client,10,0,0,throttle)
-
+def stabilizeZ (error_old, integration_term):
+    currentZ = E100_functions.get_barometer(client);
+    error 
 
 while True:
     now = time.time()
@@ -107,27 +95,11 @@ while True:
         currentY, currentX = E100_functions.get_XY(client); #swapped because 
         currentZ = E100_functions.get_barometer(client);
         yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
-        alt_log.append(currentY)
-        plt.plot(alt_log)
-        targetDist = 20
-        startStab = 10
-        if abs(currentY - initY) < startStab:
-            moveRight()
-        elif abs(currentY - initY) < targetDist:
-            if yVel > 0: t = True
-            holder = stabilize(error_old, integration_term, t)
-            error_old = holder
-            integration_term += holder*dt
-        elif yVel != 0:
-            t = False
-            if yVel > 0: 
-                t = True
-                t = False
-            holder = stabilize(error_old, integration_term, t)
-            error_old = holder
-            integration_term += holder*dt
-        else: 
-            E100_functions.set_quadcopter(client,0,0,0,0.6)
+        targetDist = -10
+        holder = stabilizeAll(error_old, integration_term, targetDist)
+        error_old = holder
+        integration_term += holder*dt
+        
             
 
 
