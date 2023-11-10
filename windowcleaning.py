@@ -17,6 +17,7 @@ sys.path.append(str(Path(airsim_install) / 'PythonClient' / 'multirotor'))
 
 # import setup_path
 import time
+import random
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -42,23 +43,20 @@ currentY = initY
 currentZ = initZ
 
 print(initX)
-print(" ")
 print(initY)
-print(" ")
 print(initZ)
-print(" ")
 
-K_PX = 2
-K_IX = 0.4
-K_DX = 1.5
+K_PX = 1
+K_IX = 0.2
+K_DX = 1
 
 K_PY = 1.5
-K_IY = 0.4
+K_IY = 0.05
 K_DY = 1.5
 
 K_PZ = 2
-K_IZ = 0.6
-K_DZ = 0.5
+K_IZ = 0.2
+K_DZ = 1
 #############
 
 errorX = 0
@@ -80,34 +78,55 @@ alt_log = []
 # roll is
 
 alpha_alt = 0.7
-alpha_lidar = 1.0
+alpha_lidar = 0.6
 start = time.time()
 
 
 #TODO: in order, plotting, finetune variable, stabilizeX, wind, stabilize after wind, motion path
+#DIMENSIONS between Unreal and Airsim are about 1:1
 
+#set building to loc: -1800, 5000, 850, set size to 20, 20, 50
+#drone to -3000, 5000, z doesn't matter so long as < 10000
+#LOCATION is based on cm
 
 def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ):
-    errorX = 0
+    pitch, errorX = stabilizeX(errorOldX, integrationX, targetX)
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
     throttle, errorZ = stabilizeZ(errorOldZ, integrationZ, targetZ)
-    # future stabilizeX
-
-    E100_functions.set_quadcopter(client, roll, 0, 0, throttle)
+    
+    print(roll)
+    print(pitch)
+    print(throttle)
+    
+    if random.randrange(-10,10) > 8: wind()
+    
+    if throttle > 1: throttle = 1
+    if throttle < 0: throttle = 0
+    E100_functions.set_quadcopter(client, roll, pitch, 0, throttle)
     return errorX, errorY, errorZ
 
+def stabilizeX(error_old, integration_term, target_dist):
+    currentX, r, l, b = E100_functions.get_lidars(client);
+    
+    #difference between front and front1???
+    #currentX = alpha_lidar*currentX + (1-alpha_lidar)*currentX
+    error = target_dist - currentX
+    if abs(error) > 20: error = 0
+    #optional stop subroutine
+    differential_term = (error - error_old) / dt
+
+    pitch = K_PX * error + K_IX * integration_term + K_DX * differential_term
+    if np.isnan(pitch): pitch = 0
+    return pitch, error
 
 def stabilizeY(error_old, integration_term, target_dist):
     currentY, currentX = E100_functions.get_XY(client);  # swapped because
-    # possibly change to a variable later
     error = target_dist - currentY
 
     differential_term = (error - error_old) / dt
 
     roll = K_PY * error + K_IY * integration_term + K_DY * differential_term
-
-    roll *= 2
-    return roll, error
+    return roll, error 
 
 
 def stabilizeZ(error_old, integration_term, target_dist):
@@ -117,9 +136,11 @@ def stabilizeZ(error_old, integration_term, target_dist):
     differential_term = (error - error_old) / dt
 
     throttle = K_PZ * error + K_IZ * integration_term + K_DZ * differential_term
-
     return throttle, error
 
+def wind():
+    print("blew")
+    E100_functions.set_wind(client,random.randrange(-10,10),random.randrange(-10,10),random.randrange(-10,10))
 
 while True:
     now = time.time()
@@ -127,6 +148,7 @@ while True:
     currentZ = E100_functions.get_barometer(client)
     yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
     
+    targetX = 2
     targetY = -10
     targetZ = initZ
     
