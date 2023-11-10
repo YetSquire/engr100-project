@@ -51,7 +51,7 @@ K_IX = 0.2
 K_DX = 1
 
 K_PY = 1.5
-K_IY = 0.05
+K_IY = 0
 K_DY = 1.5
 
 K_PZ = 2
@@ -89,6 +89,8 @@ start = time.time()
 #drone to -3000, 5000, z doesn't matter so long as < 10000
 #LOCATION is based on cm
 
+#Questions for next week: a good way to prevent more overshooting, completely stabilize height, and should we implement alpha control? Good way to show wind naturally??
+
 def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ):
     pitch, errorX = stabilizeX(errorOldX, integrationX, targetX)
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
@@ -98,7 +100,8 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     print(pitch)
     print(throttle)
     
-    if random.randrange(-10,10) > 8: wind()
+    #random gusts of wind
+    #if random.randrange(-10,10) > 8: wind()
     
     if throttle > 1: throttle = 1
     if throttle < 0: throttle = 0
@@ -149,8 +152,8 @@ while True:
     yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
     
     targetX = 2
-    targetY = -10
-    targetZ = initZ
+    targetY = 0
+    targetZ = initZ + 50
     
     errorX, errorY, errorZ = stabilizeAll(errorX, integrationX, targetX,
                                           errorY, integrationY, targetY,
