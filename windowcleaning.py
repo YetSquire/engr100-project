@@ -35,7 +35,8 @@ client.armDisarm(True)
 
 #### Copy and paste the above in your own flight controller #####
 
-initX, initY = E100_functions.get_XY(client)
+initY, initX = E100_functions.get_XY(client)
+#initX, r, l, b = E100_functions.get_lidars(client);
 initZ = E100_functions.get_barometer(client)
 
 currentX = initX
@@ -46,17 +47,17 @@ print(initX)
 print(initY)
 print(initZ)
 
-K_PX = 1
+K_PX = 2
 K_IX = 0.2
-K_DX = 1
+K_DX = 2
 
 K_PY = 1.5
 K_IY = 0
 K_DY = 1.5
 
-K_PZ = 2
-K_IZ = 0.2
-K_DZ = 1
+K_PZ = 2.5
+K_IZ = 0.5
+K_DZ = 2
 #############
 
 errorX = 0
@@ -95,11 +96,12 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     pitch, errorX = stabilizeX(errorOldX, integrationX, targetX)
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
     throttle, errorZ = stabilizeZ(errorOldZ, integrationZ, targetZ)
-    
-    print(roll)
-    print(pitch)
-    print(throttle)
-    
+    currentY, currentX = E100_functions.get_XY(client);
+    #print(roll)
+    #print(pitch)
+    #print(throttle)
+    print(currentX)
+    print(currentY)
     #random gusts of wind
     #if random.randrange(-10,10) > 8: wind()
     
@@ -109,17 +111,21 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     return errorX, errorY, errorZ
 
 def stabilizeX(error_old, integration_term, target_dist):
-    currentX, r, l, b = E100_functions.get_lidars(client);
+    #currentX, r, l, b = E100_functions.get_lidars(client);
+    currentY, currentX = E100_functions.get_XY(client);
     
     #difference between front and front1???
     #currentX = alpha_lidar*currentX + (1-alpha_lidar)*currentX
     error = target_dist - currentX
-    if abs(error) > 20: error = 0
     #optional stop subroutine
     differential_term = (error - error_old) / dt
 
     pitch = K_PX * error + K_IX * integration_term + K_DX * differential_term
-    if np.isnan(pitch): pitch = 0
+    if np.isnan(pitch): pitch = -5
+    #if abs(error) > 20: pitch = 0
+    #ask profs
+    
+    
     return pitch, error
 
 def stabilizeY(error_old, integration_term, target_dist):
@@ -151,9 +157,9 @@ while True:
     currentZ = E100_functions.get_barometer(client)
     yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
     
-    targetX = 2
-    targetY = 0
-    targetZ = initZ + 50
+    targetX = initX
+    targetY = -10
+    targetZ = initZ
     
     errorX, errorY, errorZ = stabilizeAll(errorX, integrationX, targetX,
                                           errorY, integrationY, targetY,
