@@ -37,7 +37,7 @@ client.armDisarm(True)
 
 initY, initX = E100_functions.get_XY(client)
 #initX, r, l, b = E100_functions.get_lidars(client);
-initZ = E100_functions.get_barometer(client)
+lastZ = initZ = E100_functions.get_barometer(client)
 
 currentX = initX
 currentY = initY
@@ -55,9 +55,9 @@ K_PY = 1.5
 K_IY = 0
 K_DY = 1.5
 
-K_PZ = 2.5
-K_IZ = 0.5
-K_DZ = 2
+K_PZ = 0.5
+K_IZ = 0.05
+K_DZ = 0.5
 #############
 
 errorX = 0
@@ -72,14 +72,19 @@ targetX = 0
 targetY = 0
 targetZ = 0
 
-alt_log = []
+alpha = 0.85
 
-# throttle keeps z constant
-# pitch is from building (existing wind concept)
-# roll is
+#############
+windOn = False #not using this for now
+startedLeft = True
+buildingHeight = 40
+buildingWidth = 20
+windowHeight = 20
+windowInterval = 20
 
-alpha_alt = 0.7
-alpha_lidar = 0.6
+
+
+
 start = time.time()
 
 
@@ -92,23 +97,23 @@ start = time.time()
 
 #Questions for next week: a good way to prevent more overshooting, completely stabilize height, and should we implement alpha control? Good way to show wind naturally??
 
-def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ):
+def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ, lastZ):
     pitch, errorX = stabilizeX(errorOldX, integrationX, targetX)
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
-    throttle, errorZ = stabilizeZ(errorOldZ, integrationZ, targetZ)
+    throttle, errorZ, lastZ = stabilizeZ(errorOldZ, integrationZ, targetZ, lastZ)
     currentY, currentX = E100_functions.get_XY(client);
     #print(roll)
     #print(pitch)
     #print(throttle)
-    print(currentX)
-    print(currentY)
+    #print(currentX)
+    #print(currentY)
     #random gusts of wind
     #if random.randrange(-10,10) > 8: wind()
     
     if throttle > 1: throttle = 1
     if throttle < 0: throttle = 0
     E100_functions.set_quadcopter(client, roll, pitch, 0, throttle)
-    return errorX, errorY, errorZ
+    return errorX, errorY, errorZ, lastZ
 
 def stabilizeX(error_old, integration_term, target_dist):
     #currentX, r, l, b = E100_functions.get_lidars(client);
@@ -116,12 +121,14 @@ def stabilizeX(error_old, integration_term, target_dist):
     
     #difference between front and front1???
     #currentX = alpha_lidar*currentX + (1-alpha_lidar)*currentX
-    error = target_dist - currentX
+    error = currentX - target_dist
     #optional stop subroutine
     differential_term = (error - error_old) / dt
 
     pitch = K_PX * error + K_IX * integration_term + K_DX * differential_term
-    if np.isnan(pitch): pitch = -5
+    #if np.isnan(pitch): pitch = 0
+    if abs(error) < 0.1: pitch = 0.1
+    #print(error)
     #if abs(error) > 20: pitch = 0
     #ask profs
     
@@ -138,14 +145,22 @@ def stabilizeY(error_old, integration_term, target_dist):
     return roll, error 
 
 
-def stabilizeZ(error_old, integration_term, target_dist):
+def stabilizeZ(error_old, integration_term, target_dist, lastZ):
     currentZ = E100_functions.get_barometer(client);
+    
+    currentZ = alpha*currentZ + (1-alpha)*lastZ
+    lastZ = currentZ
+    
     error = target_dist - currentZ
 
     differential_term = (error - error_old) / dt
 
     throttle = K_PZ * error + K_IZ * integration_term + K_DZ * differential_term
-    return throttle, error
+    if throttle >= 1:
+        throttle = 1
+    if throttle < 0:
+        throttle = 0
+    return throttle, error, lastZ
 
 def wind():
     print("blew")
@@ -153,17 +168,60 @@ def wind():
 
 while True:
     now = time.time()
-    currentY, currentX = E100_functions.get_XY(client)  # swapped because
-    currentZ = E100_functions.get_barometer(client)
-    yVel, xVel, zVel = E100_functions.get_linear_velocity(client)
     
     targetX = initX
-    targetY = -10
-    targetZ = initZ
     
-    errorX, errorY, errorZ = stabilizeAll(errorX, integrationX, targetX,
-                                          errorY, integrationY, targetY,
-                                          errorZ, integrationZ, targetZ)
-    integrationX += errorX*dt
-    integrationY += errorY*dt
-    integrationZ += errorZ*dt
+    #targetY and targetZ are relative to where the drone originally started- 0,0, in a sense
+    zHold = initZ
+    while lastZ < buildingHeight:
+        currentY, currentX = E100_functions.get_XY(client)  # swapped because
+        zHold += windowHeight
+        targetY = currentY
+        targetZ = zHold
+        iterZ = E100_functions.get_barometer(client) #the height at the beginning of the window climb
+        
+        while lastZ < iterZ + windowHeight:
+            errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
+                                              errorY, integrationY, targetY,
+                                              errorZ, integrationZ, targetZ,
+                                              lastZ)
+            integrationX += errorX*dt
+            integrationY += errorY*dt
+            integrationZ += errorZ*dt
+        if startedLeft: yHold = 0
+        if not startedLeft: yHold = buildingWidth
+        if startedLeft:
+           while currentY < buildingWidth:
+               iterY, unused = E100_functions.get_XY(client)
+               startedLeft = False
+               while currentY < iterY + windowInterval:
+                   currentY, currentX = E100_functions.get_XY(client)
+                   targetY = iterY + windowInterval
+                   errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
+                                                     errorY, integrationY, targetY,
+                                                     errorZ, integrationZ, targetZ,
+                                                     lastZ)
+                   integrationX += errorX*dt
+                   integrationY += errorY*dt
+                   integrationZ += errorZ*dt
+        else:
+            while currentY > 0:
+                iterY, unused = E100_functions.get_XY(client)
+                startedLeft = True
+                while currentY > iterY - windowInterval:
+                    currentY, currentX = E100_functions.get_XY(client)
+                    targetY = iterY - windowInterval
+                    errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
+                                                      errorY, integrationY, targetY,
+                                                      errorZ, integrationZ, targetZ,
+                                                      lastZ)
+                    integrationX += errorX*dt
+                    integrationY += errorY*dt
+                    integrationZ += errorZ*dt
+                    
+                    
+                    #ok so currently, the drone flies above the building at the very end for some reason
+                    #most of it looks ok before that, needs fine-tuning
+                   
+               
+               
