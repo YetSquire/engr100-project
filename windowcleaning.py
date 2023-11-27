@@ -75,13 +75,13 @@ targetZ = 0
 alpha = 0.85
 
 #############
-windOn = False #not using this for now
+windOn = True #not using this for now
 startedLeft = True
 buildingHeight = 40
 buildingWidth = 20
-windowHeight = 20
-windowInterval = 20
-
+windowHeight = 10
+windowInterval = 5
+done = False
 
 
 
@@ -91,11 +91,14 @@ start = time.time()
 #TODO: in order, plotting, finetune variable, stabilizeX, wind, stabilize after wind, motion path
 #DIMENSIONS between Unreal and Airsim are about 1:1
 
-#set building to loc: -1800, 5000, 850, set size to 20, 20, 50
-#drone to -3000, 5000, z doesn't matter so long as < 10000
+#set building to loc: -1800, 5000, 2500, set size to 20, 20, 50
+#drone to -3300, 4000, 1000
 #LOCATION is based on cm
 
 #Questions for next week: a good way to prevent more overshooting, completely stabilize height, and should we implement alpha control? Good way to show wind naturally??
+def wait():
+    E100_functions.set_quadcopter(client, 0, 0, 0, 1)
+    #print("waited")
 
 def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ, lastZ):
     pitch, errorX = stabilizeX(errorOldX, integrationX, targetX)
@@ -108,7 +111,6 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     #print(currentX)
     #print(currentY)
     #random gusts of wind
-    #if random.randrange(-10,10) > 8: wind()
     
     if throttle > 1: throttle = 1
     if throttle < 0: throttle = 0
@@ -173,7 +175,7 @@ while True:
     
     #targetY and targetZ are relative to where the drone originally started- 0,0, in a sense
     zHold = initZ
-    while lastZ < buildingHeight:
+    while lastZ < buildingHeight and not done:
         currentY, currentX = E100_functions.get_XY(client)  # swapped because
         zHold += windowHeight
         targetY = currentY
@@ -181,6 +183,7 @@ while True:
         iterZ = E100_functions.get_barometer(client) #the height at the beginning of the window climb
         
         while lastZ < iterZ + windowHeight:
+            if windOn and random.randrange(-10,10) > 8: wind()
             errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
                                               errorY, integrationY, targetY,
                                               errorZ, integrationZ, targetZ,
@@ -191,10 +194,12 @@ while True:
         if startedLeft: yHold = 0
         if not startedLeft: yHold = buildingWidth
         if startedLeft:
-           while currentY < buildingWidth:
+           while currentY < buildingWidth - windowInterval:
                iterY, unused = E100_functions.get_XY(client)
                startedLeft = False
+               wait()
                while currentY < iterY + windowInterval:
+                   if windOn and random.randrange(-10,10) > 8: wind()
                    currentY, currentX = E100_functions.get_XY(client)
                    targetY = iterY + windowInterval
                    errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
@@ -204,11 +209,14 @@ while True:
                    integrationX += errorX*dt
                    integrationY += errorY*dt
                    integrationZ += errorZ*dt
+               wait()
         else:
-            while currentY > 0:
+            while currentY > windowInterval:
                 iterY, unused = E100_functions.get_XY(client)
                 startedLeft = True
+                wait()
                 while currentY > iterY - windowInterval:
+                    if windOn and random.randrange(-10,10) > 8: wind()
                     currentY, currentX = E100_functions.get_XY(client)
                     targetY = iterY - windowInterval
                     errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
@@ -218,10 +226,19 @@ while True:
                     integrationX += errorX*dt
                     integrationY += errorY*dt
                     integrationZ += errorZ*dt
+                wait()
+                    
+        if abs(lastZ-buildingHeight) < 5: done = True
                     
                     
                     #ok so currently, the drone flies above the building at the very end for some reason
                     #most of it looks ok before that, needs fine-tuning
                    
-               
-               
+    #print("ended")
+    errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, 0,
+                                          errorY, integrationY, 0,
+                                          errorZ, integrationZ, 0,
+                                          lastZ)
+    integrationX += errorX*dt
+    integrationY += errorY*dt
+    integrationZ += errorZ*dt
