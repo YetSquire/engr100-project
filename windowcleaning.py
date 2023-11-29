@@ -56,7 +56,7 @@ K_IY = 0
 K_DY = 1.5
 
 K_PZ = 0.5
-K_IZ = 0.05
+K_IZ = 0.1
 K_DZ = 0.5
 #############
 
@@ -75,13 +75,23 @@ targetZ = 0
 alpha = 0.85
 
 #############
-windOn = True #not using this for now
+windOn = True
 startedLeft = True
 buildingHeight = 40
 buildingWidth = 20
 windowHeight = 10
 windowInterval = 5
 done = False
+
+y_log = []
+z_log = []
+wind_y_log = []
+wind_z_log = []
+
+x_log = []
+wind_x_log = []
+
+
 
 
 
@@ -96,8 +106,11 @@ start = time.time()
 #LOCATION is based on cm
 
 #Questions for next week: a good way to prevent more overshooting, completely stabilize height, and should we implement alpha control? Good way to show wind naturally??
-def wait():
-    E100_functions.set_quadcopter(client, 0, 0, 0, 1)
+def wait(begin):
+    '''now = time.time()
+    while now-begin < 3:
+        now = time.time()
+        E100_functions.set_quadcopter(client, 0, 0, 0, 0.6)'''
     #print("waited")
 
 def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targetY, errorOldZ, integrationZ, targetZ, lastZ):
@@ -105,6 +118,7 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     roll, errorY = stabilizeY(errorOldY, integrationY, targetY)
     throttle, errorZ, lastZ = stabilizeZ(errorOldZ, integrationZ, targetZ, lastZ)
     currentY, currentX = E100_functions.get_XY(client);
+    
     #print(roll)
     #print(pitch)
     #print(throttle)
@@ -115,6 +129,8 @@ def stabilizeAll(errorOldX, integrationX, targetX, errorOldY, integrationY, targ
     if throttle > 1: throttle = 1
     if throttle < 0: throttle = 0
     E100_functions.set_quadcopter(client, roll, pitch, 0, throttle)
+    x_log.append(currentX)
+    y_log.append(currentY)
     return errorX, errorY, errorZ, lastZ
 
 def stabilizeX(error_old, integration_term, target_dist):
@@ -149,7 +165,7 @@ def stabilizeY(error_old, integration_term, target_dist):
 
 def stabilizeZ(error_old, integration_term, target_dist, lastZ):
     currentZ = E100_functions.get_barometer(client);
-    
+    z_log.append(currentZ)
     currentZ = alpha*currentZ + (1-alpha)*lastZ
     lastZ = currentZ
     
@@ -166,7 +182,14 @@ def stabilizeZ(error_old, integration_term, target_dist, lastZ):
 
 def wind():
     print("blew")
+    currentY, currentX = E100_functions.get_XY(client);
+    currentZ = E100_functions.get_barometer(client);
+    wind_x_log.append(currentX)
+    wind_y_log.append(currentY)
+    wind_z_log.append(currentZ)
     E100_functions.set_wind(client,random.randrange(-10,10),random.randrange(-10,10),random.randrange(-10,10))
+    
+    
 
 while True:
     now = time.time()
@@ -182,8 +205,8 @@ while True:
         targetZ = zHold
         iterZ = E100_functions.get_barometer(client) #the height at the beginning of the window climb
         
-        while lastZ < iterZ + windowHeight:
-            if windOn and random.randrange(-10,10) > 8: wind()
+        while lastZ < iterZ + windowHeight - 3:
+            if windOn and random.randrange(-20,10) > 8: wind()
             errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
                                               errorY, integrationY, targetY,
                                               errorZ, integrationZ, targetZ,
@@ -197,9 +220,10 @@ while True:
            while currentY < buildingWidth - windowInterval:
                iterY, unused = E100_functions.get_XY(client)
                startedLeft = False
-               wait()
+               sent = time.time()
+               wait(sent)
                while currentY < iterY + windowInterval:
-                   if windOn and random.randrange(-10,10) > 8: wind()
+                   if windOn and random.randrange(-20,10) > 8: wind()
                    currentY, currentX = E100_functions.get_XY(client)
                    targetY = iterY + windowInterval
                    errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
@@ -209,14 +233,16 @@ while True:
                    integrationX += errorX*dt
                    integrationY += errorY*dt
                    integrationZ += errorZ*dt
-               wait()
+               sent = time.time()
+               wait(sent)
         else:
             while currentY > windowInterval:
                 iterY, unused = E100_functions.get_XY(client)
                 startedLeft = True
-                wait()
+                sent = time.time()
+                wait(sent)
                 while currentY > iterY - windowInterval:
-                    if windOn and random.randrange(-10,10) > 8: wind()
+                    if windOn and random.randrange(-20,10) > 8: wind()
                     currentY, currentX = E100_functions.get_XY(client)
                     targetY = iterY - windowInterval
                     errorX, errorY, errorZ, lastZ = stabilizeAll(errorX, integrationX, targetX,
@@ -226,9 +252,15 @@ while True:
                     integrationX += errorX*dt
                     integrationY += errorY*dt
                     integrationZ += errorZ*dt
-                wait()
+                sent = time.time()
+                wait(sent)
                     
-        if abs(lastZ-buildingHeight) < 5: done = True
+        if buildingHeight - lastZ < 5: 
+            done = True
+            #plt.scatter(y_log, z_log)
+            #plt.scatter(wind_y_log, wind_z_log)
+            plt.scatter(x_log, z_log)
+            plt.scatter(wind_x_log, wind_z_log)
                     
                     
                     #ok so currently, the drone flies above the building at the very end for some reason
@@ -242,3 +274,4 @@ while True:
     integrationX += errorX*dt
     integrationY += errorY*dt
     integrationZ += errorZ*dt
+    
